@@ -14,8 +14,9 @@ def items_of_file(fn):
 
 def add_items_to_db(cursor, inventory):
     for _, desc in inventory:
+        print(desc)
         cursor.execute(
-            "SELECT id, name FROM  Item WHERE name IS ?",
+            "SELECT id, name FROM  Item WHERE name = ?",
             (desc,)
         )
         row = cursor.fetchone()

@@ -2,7 +2,7 @@ import sys
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
 from pyquery import PyQuery
-import webbrowser
+from re import match
 
 headers = {
     "User-Agent": "MyCustomBrowser/1.0",
@@ -34,7 +34,97 @@ def search_for_item(item_name):
         print(f"URL Error: {e.reason}")
     return result
 
+item_flags = [
+    "No Trade",
+    "Temporary",
+    "Lore Item",
+    "Heirloom",
+    "Attunable",
+    "Augmentation",
+    "Infusible",
+    "Quest Item",
+    "Prestige",
+    "Cash Loot",
+    "No Storage",
+    "Placeable"
+]
+
+stats_list = [
+    "STR",
+    "STA",
+    "INT",
+    "WIS",
+    "AGI",
+    "DEX",
+    "CHA"
+]
+
+primary_stats_list = [
+    "AC",
+    "HP",
+    "Mana",
+    "Endur",
+    "Purity"
+]
+
+resists_list = [
+    "FIRE",
+    "DISEASE",
+    "COLD",
+    "MAGIC",
+    "POISON",
+    "CORRUPTION"
+]
+
+contianer_stats = [
+    "Weight Red",
+    "Capacity",
+    "Size Capacity"
+]
+
+slots = [
+	"EAR",
+	"HEAD",
+	"FACE",
+	"NECK",
+	"SHOULDERS",
+	"ARMS",
+	"BACK",
+	"WRIST",
+	"RANGE",
+	"HANDS",
+	"PRIMARY",
+	"SECONDARY",
+	"FINGER",
+	"CHEST",
+	"LEGS",
+	"FEET",
+	"WAIST",
+	"CHARM",
+	"POWER SOURCE",
+	"AMMO"
+]
+
+def line_type(desc):
+    pass
+
+class item_info:
+    def __init__(self):
+        self.weight = None
+        self.size = None
+        self.tribute = None
+        self.restrictions = None
+        self.flags = []
+        self.food_type = None
+        self.primary_stats = {}
+        self.stats = {}
+        self.regens = {}
+        self.resists = {}
+        self.container_info = {}
+        self.slots = []
+
 def stats_from_item_page(description_td):
+    item_info = {}
     for line in description_td.html().split("<br/>"):
         print(line)
 
