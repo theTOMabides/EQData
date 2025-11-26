@@ -41,9 +41,9 @@ item_flags = [
     "Temporary",
     "Lore Item",
     "Heirloom",
-    "Attunable",
+    "Attuneable",
     "Augmentation",
-    "Infusible",
+    "INFUSIBLE",
     "Quest Item",
     "Prestige",
     "Cash Loot",
@@ -76,6 +76,11 @@ resists_list = [
     "MAGIC",
     "POISON",
     "CORRUPTION"
+]
+
+regens_list = [
+    "HP Regen",
+    "Mana Regeneration"
 ]
 
 contianer_stats = [
@@ -125,13 +130,30 @@ class item_info:
         self.container_info = {}
         self.slots = []
         self.aug_slots = []
-        self.purity = None
-        self.stat_re = re.compile(
-            r'([A-Z]{3,}):?\s*([+-]\d+)(?:\s*<span[^>]*>([+-]?\d+)</span>)?'
+        self.other_stats = {}
+        self.unparsed_lines = []
+        self.stat_mod_re = re.compile(
+            r'([A-Za-z ]+):?\s*([+-]\d+)(?:\s*<span[^>]*>([+-]?\d+)</span>)?'
         )
         self.resists_re = re.compile(
             r'SV (FIRE|DISEASE|COLD|MAGIC|POISON|CORRUPTION):\s*([+-]\d+)'
         )
+        self.weight_re = re.compile(
+            r'WT:\s*([\d.]+)'
+        )
+        self.size_re = re.compile(
+            r'Size:\s*(TINY|SMALL|MEDIUM|LARGE|GIANT)'
+        )
+        self.other_mods_re = re.compile(
+            r'([A-Za-z ]+?):?\s*([+-]\d+)'
+        )
+        self.other_stats_re = re.compile(
+            r'([A-Za-z ]+):?\s*(\d+)'
+        )
+        self.aug_slot_re = re.compile(
+            r'Slot (\d+), (.*)'
+        )
+
     def parse_flags(self, flag_line):
         found_one = False
         for flag in item_flags:
@@ -151,19 +173,40 @@ class item_info:
                 self.slots.append(x.strip())
             return True
         return False
-    def parse_primary_stats(self, pri_line):
-        if pri_line.startswith(tuple(primary_stats_list)):
-            matches = self.stat_re.findall(pri_line)
-            self.primary_stats = {
-                abbr: (int(value), int(mod) if mod else None)
-                for abbr, value, mod in matches }
+    def parse_augmentation_slots(self, aug_slot_line):
+        match = self.aug_slot_re.match(aug_slot_line)
+        if match:
+            slot_number = int(match.group(1))
+            slot_description = match.group(2).strip()
+            self.aug_slots.append((slot_number, slot_description))
             return True
         return False
-    def parse_purity(self, purity_line):
-        if purity_line.startswith("Purity: "):
-            self.purity = int(purity_line[8:].strip())
-            return True
-        return False
+    def parse_stats(self, pri_line):
+        result = False
+        remaining_line = pri_line
+        while len(remaining_line) > 0:
+            match = self.stat_mod_re.match(remaining_line)
+            if not match:
+                if result:
+                    print(f"Could not parse stats line further: \"{remaining_line}\"")
+                    self.unparsed_lines.append(remaining_line)
+                break
+            abbr = match.group(1).strip()
+            value = match.group(2)
+            mod = match.group(3)
+            if abbr in stats_list:
+                self.stats[abbr] = (int(value), int(mod) if mod else None)
+            elif abbr in regens_list:
+                self.regens[abbr] = int(value)
+            elif abbr in contianer_stats:
+                self.container_info[abbr] = int(value)
+            elif abbr in primary_stats_list:
+                self.primary_stats[abbr] = (int(value), int(mod) if mod else None)
+            else:
+                self.other_stats[abbr.strip()] = int(value)
+            remaining_line = remaining_line[match.end():].strip()
+            result = True
+        return result
     def parse_resists(self, resists_line):
         matches = self.resists_re.findall(resists_line)
         if matches:
@@ -182,21 +225,55 @@ class item_info:
             self.races = race_line[6:].strip().split(' ')
             return True
         return False
+    def parse_weightsize(self, ws_line):
+        weight_match = self.weight_re.search(ws_line)
+        size_match = self.size_re.search(ws_line)
+        found_one = False
+        if weight_match:
+            self.weight = float(weight_match.group(1))
+            found_one = True
+        if size_match:
+            self.size = size_match.group(1)
+            found_one = True
+        return found_one
+    def parse_other(self, other_line):
+        result = False
+        matches = self.other_mods_re.findall(other_line)
+        if matches:
+            for abbr, value in matches:
+                self.other_stats[abbr.strip()] = int(value)
+            result = True
+        matches = self.other_stats_re.findall(other_line)
+        if matches:
+            for abbr, value in matches:
+                if abbr in primary_stats_list:
+                    self.primary_stats[abbr.strip()] = int(value)
+                elif abbr in regens_list:
+                    self.regens[abbr] = int(value)
+                else:
+                    self.other_stats[abbr.strip()] = int(value)
+            result = True
+        return result
     def parse_all(self, line):
+        if len(line.strip()) == 0:
+            return True
         parsers = [
-            self.parse_flags,
+            self.parse_classes,
+            self.parse_races,
             self.parse_augmentation_types,
             self.parse_slots,
-            self.parse_primary_stats,
-            self.parse_purity,
+            self.parse_augmentation_slots,
+            self.parse_flags,
+            self.parse_weightsize,
             self.parse_resists,
-            self.parse_classes,
-            self.parse_races
+            self.parse_stats,
+            self.parse_other
         ]
         for parser in parsers:
             if parser(line):
                 return True
         print(f"Unparsed line: {line}")
+        self.unparsed_lines.append(line)
         return False
     def to_dict(self):
         return {
@@ -213,13 +290,33 @@ class item_info:
             "container_info": self.container_info,
             "slots": self.slots,
             "aug_slots": self.aug_slots,
-            "purity": self.purity
+            "other_stats": self.other_stats
         }
 
 def stats_from_item_page(description_td):
     info = item_info()
     for line in description_td.html().split("<br/>"):
         info.parse_all(line.strip())
+    return info
+
+def get_page_for_item(item_id):
+    url_string = f"https://everquest.allakhazam.com/db/item.html?item={item_id}"
+    print(f"Looking for item # {item_id} with URL \"{url_string}\"")
+    req = Request(url_string, headers=headers)
+    try:
+        with urlopen(req) as response:
+            html = response.read().decode('utf-8')
+            return html
+    except HTTPError as e:
+        print(f"HTTP Error: {e.code} {e.reason}")
+    except URLError as e:
+        print(f"URL Error: {e.reason}")
+    return None
+
+def get_item_info_from_page(html, item_id):
+    doc = PyQuery(html)
+    description_td = doc(f"#i{item_id} td.shotdata")
+    info = stats_from_item_page(description_td)
     return info
 
 if __name__ == "__main__":
@@ -234,20 +331,8 @@ if __name__ == "__main__":
         item_id = int(item_arg)
     except ValueError:
         item_id = search_for_item(item_arg)
-    url_string = f"https://everquest.allakhazam.com/db/item.html?item={item_id}"
-    req = Request(url_string, headers=headers)
-    print(f"Looking for item # {item_id} with URL \"{url_string}\"")
-    try:
-        with urlopen(req) as response:
-            html = response.read().decode('utf-8')
-            # print(f"Response from {url_string}:\n{html[:200]}...") # Print first 200 characters
-            doc = PyQuery(html)
-            description_td = doc(f"#i{item_id} td.shotdata")
-            info = stats_from_item_page(description_td)
-            print(json.dumps(info.to_dict(),indent=2))
-    except HTTPError as e:
-        print(f"HTTP Error: {e.code} {e.reason}")
-    except URLError as e:
-        print(f"URL Error: {e.reason}")
+    html = get_page_for_item(item_id)
+    info = get_item_info_from_page(html, item_id)
+    print(json.dumps(info.to_dict(),indent=2))
     
     # webbrowser.open_new_tab()
