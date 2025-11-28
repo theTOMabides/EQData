@@ -128,7 +128,9 @@ class item_info:
         self.regens = {}
         self.resists = {}
         self.container_info = {}
-        self.slots = []
+        self.slots = None
+        self.classes = None
+        self.races = None
         self.aug_slots = []
         self.other_stats = {}
         self.unparsed_lines = []
@@ -169,6 +171,8 @@ class item_info:
         return False
     def parse_slots(self, slot_line):
         if slot_line.startswith("Slot: "):
+            if self.slots is None:
+                self.slots = []
             for x in slot_line[6:].split(' '):
                 self.slots.append(x.strip())
             return True
@@ -188,7 +192,6 @@ class item_info:
             match = self.stat_mod_re.match(remaining_line)
             if not match:
                 if result:
-                    print(f"Could not parse stats line further: \"{remaining_line}\"")
                     self.unparsed_lines.append(remaining_line)
                 break
             abbr = match.group(1).strip()
@@ -272,9 +275,24 @@ class item_info:
         for parser in parsers:
             if parser(line):
                 return True
-        print(f"Unparsed line: {line}")
         self.unparsed_lines.append(line)
         return False
+    def pack_restrictions(self):
+        restrictions = {}
+        if self.classes is not None:
+            restrictions['Class'] = ','.join(self.classes)
+        if self.races is not None:
+            restrictions['Race'] = ','.join(self.races)
+        if self.slots is not None:
+            restrictions['Slots'] = ','.join(self.slots)
+        if "Required level of" in self.other_stats:
+            restrictions['Level'] = self.other_stats["Required level of"]
+        self.restrictions = restrictions
+    def pack_aug_slots(self):
+        if len(self.aug_slots) >0 and 'aug_slots' not in self.other_stats:
+            self.other_stats['aug_slots'] = []
+        for aug_entry in self.aug_slots:
+            self.other_stats['aug_slots'].append(aug_entry)
     def to_dict(self):
         return {
             "weight": self.weight,
@@ -288,15 +306,16 @@ class item_info:
             "regens": self.regens,
             "resists": self.resists,
             "container_info": self.container_info,
-            "slots": self.slots,
-            "aug_slots": self.aug_slots,
-            "other_stats": self.other_stats
+            "other_stats": self.other_stats,
+            "unparsed_lines": self.unparsed_lines
         }
 
 def stats_from_item_page(description_td):
     info = item_info()
     for line in description_td.html().split("<br/>"):
         info.parse_all(line.strip())
+    info.pack_restrictions()
+    info.pack_aug_slots()
     return info
 
 def get_page_for_item(item_id):

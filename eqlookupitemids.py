@@ -2,22 +2,6 @@ import mariadb
 import sys
 from eqiteminfo import search_for_item
 
-def lookup_item_id(cursor, name):
-    cursor.execute(
-        "SELECT id, name, allakhazam_id FROM Item WHERE name = ?",
-        (name,)
-    )
-    row = cursor.fetchone()
-    if row is not None and row[2] is None:
-        print(f"Looking up item: {row[0]}: {row[1]}")
-        item_id = search_for_item(row[1])
-        if item_id is not None:
-            print(f"Found Allakhazam ID {item_id} for item {row[1]}")
-            cursor.execute(
-                "UPDATE Item SET allakhazam_id = ? WHERE id = ?",
-                (item_id, row[0])
-            )
-
 def lookup_item_ids(cursor, count):
     cursor.execute(
         "SELECT id, name FROM Item WHERE allakhazam_id IS NULL LIMIT ?",
@@ -58,4 +42,10 @@ if __name__ == "__main__":
     except mariadb.Error as e:
         print(f"Error connecting to MariaDB Platform: {e}")
         sys.exit(1)
+    except:
+        conn.commit()
+        cursor.close()
+        conn.close()
+        raise
+        
     
