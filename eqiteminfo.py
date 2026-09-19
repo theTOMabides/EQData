@@ -347,8 +347,10 @@ if __name__ == "__main__":
     else:
         item_arg = sys.argv[1]
     try:
+        # if argument specifies an int, assume it's the ID
         item_id = int(item_arg)
     except ValueError:
+        # if argument is not an int search for the item ID
         item_id = search_for_item(item_arg)
     html = get_page_for_item(item_id)
     info = get_item_info_from_page(html, item_id)
