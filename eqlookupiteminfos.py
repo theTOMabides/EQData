@@ -1,6 +1,7 @@
 import mariadb
 import sys
 import json
+import time
 from eqiteminfo import search_for_item, get_page_for_item, get_item_info_from_page
 
 def update_item_info_in_db(cursor, item_id, item_info):
@@ -95,6 +96,7 @@ def update_item_info_in_db(cursor, item_id, item_info):
         )
 
 def lookup_item_infos(cursor, count):
+    update_count = 0
     cursor.execute(
         "SELECT allakhazam_id, name FROM Item WHERE allakhazam_id IS NOT NULL AND weight IS NULL LIMIT ?",
         (count,)
@@ -106,20 +108,15 @@ def lookup_item_infos(cursor, count):
         if html is not None:
             item_info = get_item_info_from_page(html, row[0])
             update_item_info_in_db(cursor, row[0], item_info.to_dict())
+            update_count += 1
         #    cursor.execute(
         #        "UPDATE Item SET allakhazam_id = ? WHERE id = ?",
         #        (item_id, row[0])
         #    )
+    return update_count
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("need to specify number of items to look up\n")
-        exit()
-    try:
-        count = int(sys.argv[1])
-    except ValueError:
-        print("Invalid number specified")
-        exit()
+def get_info_for_items(count):
+    update_count = 0
     try:
         conn = mariadb.connect(
             user="dad",
@@ -128,7 +125,7 @@ if __name__ == "__main__":
             port=3306,
             database="everquest_data")
         cursor = conn.cursor()
-        lookup_item_infos(cursor, int(sys.argv[1]))
+        update_count = lookup_item_infos(cursor, int(sys.argv[1]))
         conn.commit()
         cursor.close()
         conn.close()
@@ -140,4 +137,33 @@ if __name__ == "__main__":
         cursor.close()
         conn.close()
         raise
-    
+    return update_count
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("need to specify number of items to look up\n")
+        exit()
+    try:
+        count = int(sys.argv[1])
+    except ValueError:
+        print("Invalid number specified")
+        exit()
+    repeat_count = 1
+    if len(sys.argv) > 2:
+        try:
+            repeat_count = int(sys.argv[2])
+        except ValueError:
+            pass
+    repeat_delay = 15
+    if repeat_count > 1 and len(sys.argv) > 3:
+        try:
+            repeat_delay = int(sys.argv[3])
+        except ValueError:
+            pass
+
+    for _ in range(repeat_count):
+        count = get_info_for_items(count)
+        print(f"Updated info for {count} items in the database")
+        if count == 0:
+            break
+        time.sleep(repeat_delay)  # sleep for repeat_delay seconds before next iteration
