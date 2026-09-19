@@ -3,7 +3,7 @@ import sys
 
 def items_of_file(fn):
     with open(fn,"r") as invfile:
-        _ = invfile.readline()
+        _ = invfile.readline()  # discard first line (header)
         for line in invfile:
             try:
                 loc, desc, _, _, _ = line.strip().split('\t')
